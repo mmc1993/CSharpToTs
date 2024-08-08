@@ -1671,8 +1671,7 @@ namespace CSObjectWrapEditor
             GenLuaRegister();
             CallCustomGen();
 
-            GenCode.GenTSCode.Gen(LuaCallCSharp, "F:/1.d.ts");
-
+            GenCode.GenTSCode.Gen(LuaCallCSharp, GeneratorConfig.common_path + "t.d.ts");
             Debug.Log("finished! use " + (DateTime.Now - start).TotalMilliseconds + " ms");
             AssetDatabase.Refresh();
         }

@@ -95,18 +95,6 @@ namespace GenCode
             }
         }
 
-
-        [MenuItem("Test/GenTSCode")]
-        public static void GenTest()
-        {
-            List<System.Type> types = new()
-            {
-                typeof(Vector3),
-                typeof(GameObject)
-            };
-            Gen(types, "F:/1.d.ts");
-        }
-
         public static void Gen(List<System.Type> gentypes, string filename)
         {
             Contex ctx = new()
@@ -129,7 +117,7 @@ namespace GenCode
         private static void EndedContex(Contex ctx)
         {
             System.Text.StringBuilder outputBuffer = new();
-            outputBuffer.Append("declare namespace T");
+            outputBuffer.Append("declare namespace CS");
             GenCode(ctx.GenTree, 0, outputBuffer);
             ctx.FWriter.Write(outputBuffer.ToString());
 
