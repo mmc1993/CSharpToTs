@@ -23,8 +23,8 @@ namespace GenCode
             public bool IsOperator    = false;
             public bool IsConstructor = false;
             public string Name = "";
-            public string Type = "";
-            public List<(string, string, string)> Params = new();
+            public List<string>           OutParams = new();
+            public List<(string, string)> InParams = new();
         }
 
         private class PropInfo
@@ -199,15 +199,24 @@ namespace GenCode
                 if (funcInfo.IsStatic) { sb.Append("static "); }
                 sb.Append(funcInfo.Name);
                 sb.Append("(");
-                for (var i = 0; i != funcInfo.Params.Count; ++i)
+                for (var i = 0; i != funcInfo.InParams.Count; ++i)
                 {
                     if (i != 0) { sb.Append(", "); }
-                    sb.Append(funcInfo.Params[i].Item2);
+                    sb.Append(funcInfo.InParams[i].Item2);
                     sb.Append(": ");
-                    sb.Append(funcInfo.Params[i].Item1);
+                    sb.Append(funcInfo.InParams[i].Item1);
                 }
                 sb.Append("): ");
-                sb.Append(funcInfo.Type);
+
+                if (funcInfo.OutParams.Count == 1)
+                {
+                    sb.Append(funcInfo.OutParams[0]);
+                }
+                else
+                {
+                    sb.AppendFormat("LuaMultiReturn<[{0}]>", string.Join(",", funcInfo.OutParams));
+                }
+
                 sb.Append(";\n");
             }
 
@@ -280,17 +289,29 @@ namespace GenCode
                     IsOperator = methodInfo.IsSpecialName
                               && methodInfo.Name.StartsWith("op"),
                     Name = methodInfo.Name,
-                    Type = T(methodInfo.ReturnType),
                 };
+
+                funcInfo.OutParams.Add(T(methodInfo.ReturnType));
+                PushType(ctx, GetRawType(methodInfo.ReturnType));
 
                 foreach (var param in methodInfo.GetParameters())
                 {
-                    funcInfo.Params.Add((T(GetParamType(param)),
-                               param.Name, GetParamWrap(param)));
-                    PushType(ctx, GetParamType(param));
+                    if (GetParamWrap(param) == "Ref" || GetParamWrap(param) == "")
+                    {
+                        funcInfo.InParams.Add((T(GetRawType(param.ParameterType)), param.Name));
+                    }
+                    if (GetParamWrap(param) == "Out" || GetParamWrap(param) == "Ref")
+                    {
+                        funcInfo.OutParams.Add(T(GetRawType(param.ParameterType)));
+                    }
+                    PushType(ctx, GetRawType(param.ParameterType));
                 }
 
-                PushType(ctx,methodInfo.ReturnType);
+                if (funcInfo.OutParams.Count > 1 && funcInfo.OutParams[0] == "void")
+                {
+                    funcInfo.OutParams.RemoveAt(0);
+                }
+
                 classInfo.MemberFuncs.Add(funcInfo);
             }
         }
@@ -374,21 +395,19 @@ namespace GenCode
             return true;
         }
 
-        private static bool IsRefType(System.Type type)
+        private static bool HasRefType(System.Type type)
         {
             return type.Name.EndsWith("&");
         }
 
-        private static System.Type GetParamType(ParameterInfo parameterInfo)
+        private static System.Type GetRawType(System.Type type)
         {
-            return IsRefType(parameterInfo.ParameterType)
-                 ? parameterInfo.ParameterType.GetElementType()
-                 : parameterInfo.ParameterType;
+            return HasRefType(type) ? type.GetElementType() : type;
         }
 
         private static string GetParamWrap(ParameterInfo parameterInfo)
         {
-            return IsRefType(parameterInfo.ParameterType) ? parameterInfo.Attributes == ParameterAttributes.Out ? "Out" : "Ref" : "";
+            return HasRefType(parameterInfo.ParameterType) ? parameterInfo.Attributes == ParameterAttributes.Out ? "Out" : "Ref" : "";
         }
     }
 }
