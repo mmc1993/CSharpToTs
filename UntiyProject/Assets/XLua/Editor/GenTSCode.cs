@@ -21,7 +21,6 @@ namespace GenCode
         {
             public bool IsStatic      = false;
             public bool IsOperator    = false;
-            public bool IsConstructor = false;
             public string Name = "";
             public List<string>           OutParams = new();
             public List<(string, string)> InParams = new();
@@ -105,6 +104,16 @@ namespace GenCode
             }
         }
 
+        private static string Ident(int count)
+        {
+            System.Text.StringBuilder sb = new();
+            for (var i = 0; i != count; ++i)
+            {
+                sb.Append("    ");
+            }
+            return sb.ToString();
+        }
+
         [MenuItem("Test/GenTSCode")]
         public static void GenTest()
         {
@@ -155,6 +164,7 @@ namespace GenCode
                 if (classInfo != null && ctx.HasTypes[type])
                 {
                     HandlePropertys(ctx, classInfo, type.GetProperties());
+                    HandleMethods(ctx, classInfo, type.GetConstructors());
                     HandleMethods(ctx, classInfo, type.GetMethods());
                     HandleFields(ctx, classInfo, type.GetFields());
                 }
@@ -206,15 +216,11 @@ namespace GenCode
                     sb.Append(": ");
                     sb.Append(funcInfo.InParams[i].Item1);
                 }
-                sb.Append("): ");
+                sb.Append(")");
 
-                if (funcInfo.OutParams.Count == 1)
+                if (funcInfo.OutParams.Count > 0)
                 {
-                    sb.Append(funcInfo.OutParams[0]);
-                }
-                else
-                {
-                    sb.AppendFormat("[{0}]", string.Join(",", funcInfo.OutParams));
+                    sb.AppendFormat(": [{0}]", string.Join(", ", funcInfo.OutParams));
                 }
 
                 sb.Append(";\n");
@@ -233,16 +239,6 @@ namespace GenCode
             sb.Append(Ident(ident));
             sb.Append("}\n");
             outputBuffer.Append(sb.ToString());
-        }
-
-        private static string Ident(int count)
-        {
-            System.Text.StringBuilder sb = new();
-            for (var i = 0; i != count; ++i)
-            {
-                sb.Append("    ");
-            }
-            return sb.ToString();
         }
 
         private static NamespaceInfo HandleNamespace(Contex ctx, System.Type typeInfo)
@@ -273,28 +269,33 @@ namespace GenCode
             return classInfo;
         }
 
-        private static void HandleMethods(Contex ctx, ClassInfo classInfo, MethodInfo[] methodInfos)
+        private static void HandleMethods(Contex ctx, ClassInfo classInfo, MethodBase[] methodBases)
         {
-            foreach (var methodInfo in methodInfos)
+            foreach (var methodBase in methodBases)
             {
-                if (!CheckMethodValid(methodInfo))
+                var methodInfo = methodBase as MethodInfo;
+                var ctorInfo = methodBase as ConstructorInfo;
+
+                if (methodInfo != null && !CheckMethodValid(methodInfo))
                 {
                     continue;
                 }
 
                 var funcInfo = new FuncInfo()
                 {
-                    IsStatic = methodInfo.IsStatic,
-                    IsConstructor = methodInfo.IsConstructor,
-                    IsOperator = methodInfo.IsSpecialName
-                              && methodInfo.Name.StartsWith("op"),
-                    Name = methodInfo.Name,
+                    IsStatic = methodBase.IsStatic,
+                    IsOperator = methodBase.IsSpecialName
+                              && methodBase.Name.StartsWith("op"),
+                    Name = ctorInfo != null ? "constructor" : methodInfo.Name,
                 };
 
-                funcInfo.OutParams.Add(T(methodInfo.ReturnType));
-                PushType(ctx, GetRawType(methodInfo.ReturnType));
+                if (methodInfo != null)
+                {
+                    funcInfo.OutParams.Add(T(methodInfo.ReturnType));
+                    PushType(ctx, GetRawType(methodInfo.ReturnType));
+                }
 
-                foreach (var param in methodInfo.GetParameters())
+                foreach (var param in methodBase.GetParameters())
                 {
                     if (GetParamWrap(param) == "Ref" || GetParamWrap(param) == "")
                     {
