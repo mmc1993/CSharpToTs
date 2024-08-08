@@ -2,19 +2,29 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
+using System.Reflection;
 
 namespace GenCode
 {
+    class AAA
+    {
+        public int Func(out int a, ref int b)
+        {
+            a = 0;
+            return 0;
+        }
+    }
+
     public static class GenTSCode
     {
-        //  ¹Ø¼ü×ÖÌæ»»
-        //  ºÚÃûµ¥
         private class FuncInfo
         {
-            public bool IsStatic = false;
+            public bool IsStatic      = false;
+            public bool IsOperator    = false;
+            public bool IsConstructor = false;
             public string Name = "";
             public string Type = "";
-            public List<(string, string)> Params = new();
+            public List<(string, string, string)> Params = new();
         }
 
         private class PropInfo
@@ -93,6 +103,17 @@ namespace GenCode
                 }
                 return keyword + (isArray ? "[]" : "");
             }
+        }
+
+        [MenuItem("Test/GenTSCode")]
+        public static void GenTest()
+        {
+            List<System.Type> types = new()
+            {
+                typeof(AAA),
+                typeof(Vector3),
+            };
+            Gen(types, "G:/TSDemo/types/t.d.ts");
         }
 
         public static void Gen(List<System.Type> gentypes, string filename)
@@ -175,6 +196,7 @@ namespace GenCode
             foreach (var funcInfo in classInfo.MemberFuncs)
             {
                 sb.Append(Ident(ident + 1));
+                if (funcInfo.IsStatic) { sb.Append("static "); }
                 sb.Append(funcInfo.Name);
                 sb.Append("(");
                 for (var i = 0; i != funcInfo.Params.Count; ++i)
@@ -193,6 +215,7 @@ namespace GenCode
             foreach (var propInfo in classInfo.MemberProps)
             {
                 sb.Append(Ident(ident + 1));
+                if (propInfo.IsStatic) { sb.Append("static "); }
                 sb.Append(propInfo.Name);
                 sb.Append(" : ");
                 sb.Append(propInfo.Type);
@@ -241,29 +264,30 @@ namespace GenCode
             return classInfo;
         }
 
-        private static void HandleMethods(Contex ctx, ClassInfo classInfo, System.Reflection.MethodInfo[] methodInfos)
+        private static void HandleMethods(Contex ctx, ClassInfo classInfo, MethodInfo[] methodInfos)
         {
             foreach (var methodInfo in methodInfos)
             {
-                if (!methodInfo.IsPublic || methodInfo.IsSpecialName ||
-                    methodInfo.ContainsGenericParameters) { continue; }
-
-                if (!CheckParamVaild(methodInfo.GetParameters()))
+                if (!CheckMethodValid(methodInfo))
                 {
                     continue;
                 }
 
                 var funcInfo = new FuncInfo()
                 {
+                    IsStatic = methodInfo.IsStatic,
+                    IsConstructor = methodInfo.IsConstructor,
+                    IsOperator = methodInfo.IsSpecialName
+                              && methodInfo.Name.StartsWith("op"),
                     Name = methodInfo.Name,
                     Type = T(methodInfo.ReturnType),
-                    IsStatic = methodInfo.IsStatic,
                 };
 
                 foreach (var param in methodInfo.GetParameters())
                 {
-                    funcInfo.Params.Add((T(param.ParameterType), param.Name));
-                    PushType(ctx, param.ParameterType);
+                    funcInfo.Params.Add((T(GetParamType(param)),
+                               param.Name, GetParamWrap(param)));
+                    PushType(ctx, GetParamType(param));
                 }
 
                 PushType(ctx,methodInfo.ReturnType);
@@ -271,13 +295,15 @@ namespace GenCode
             }
         }
 
-        private static void HandlePropertys(Contex ctx, ClassInfo classInfo, System.Reflection.PropertyInfo[] propertyInfos)
+        private static void HandlePropertys(Contex ctx, ClassInfo classInfo, PropertyInfo[] propertyInfos)
         {
             foreach (var propertyInfo in propertyInfos)
             {
                 var propInfo = new PropInfo()
                 {
-                    IsStatic = false, Name = propertyInfo.Name,
+                    IsStatic = (propertyInfo.SetMethod != null? propertyInfo.SetMethod.IsStatic: false)
+                            || (propertyInfo.GetMethod != null? propertyInfo.GetMethod.IsStatic: false),
+                    Name = propertyInfo.Name,
                     Type = T(propertyInfo.PropertyType),
                 };
                 classInfo.MemberProps.Add(propInfo);
@@ -285,7 +311,7 @@ namespace GenCode
             }
         }
 
-        private static void HandleFields(Contex ctx, ClassInfo classInfo, System.Reflection.FieldInfo[] fieldInfos)
+        private static void HandleFields(Contex ctx, ClassInfo classInfo, FieldInfo[] fieldInfos)
         {
             foreach (var fieldInfo in fieldInfos)
             {
@@ -315,17 +341,54 @@ namespace GenCode
             ctx.GenTypes.Enqueue(type);
         }
 
-        private static bool CheckParamVaild(System.Reflection.ParameterInfo[] paramInfos)
+        private static bool CheckMethodValid(MethodInfo methodInfo)
         {
-            foreach (var paramInfo in paramInfos)
+            if (!methodInfo.IsPublic || methodInfo.ContainsGenericParameters)
             {
-                if (paramInfo.ParameterType.Name.Contains("&")          ||
-                    paramInfo.ParameterType.ContainsGenericParameters   ||
+                return false;
+            }
+
+            if (methodInfo.IsSpecialName)
+            {
+                if (!methodInfo.Name.StartsWith("op") && !methodInfo.IsConstructor)
+                {
+                    return false;
+                }
+            }
+
+            if (methodInfo.ReturnType.ContainsGenericParameters ||
+                methodInfo.ReturnType.IsGenericType             ||
+                methodInfo.ReturnType.IsPointer                 ||
+                methodInfo.ReturnType.IsInterface)
+            {
+                return false;
+            }
+
+            foreach (var paramInfo in methodInfo.GetParameters())
+            {
+                if (paramInfo.ParameterType.ContainsGenericParameters   ||
                     paramInfo.ParameterType.IsGenericType               ||
                     paramInfo.ParameterType.IsPointer                   ||
                     paramInfo.ParameterType.IsInterface) { return false; }
             }
             return true;
+        }
+
+        private static bool IsRefType(System.Type type)
+        {
+            return type.Name.EndsWith("&");
+        }
+
+        private static System.Type GetParamType(ParameterInfo parameterInfo)
+        {
+            return IsRefType(parameterInfo.ParameterType)
+                 ? parameterInfo.ParameterType.GetElementType()
+                 : parameterInfo.ParameterType;
+        }
+
+        private static string GetParamWrap(ParameterInfo parameterInfo)
+        {
+            return IsRefType(parameterInfo.ParameterType) ? parameterInfo.Attributes == ParameterAttributes.Out ? "Out" : "Ref" : "";
         }
     }
 }
