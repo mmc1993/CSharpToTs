@@ -214,7 +214,7 @@ namespace GenCode
                 }
                 else
                 {
-                    sb.AppendFormat("LuaMultiReturn<[{0}]>", string.Join(",", funcInfo.OutParams));
+                    sb.AppendFormat("[{0}]", string.Join(",", funcInfo.OutParams));
                 }
 
                 sb.Append(";\n");
@@ -353,7 +353,9 @@ namespace GenCode
         {
             if (type.IsArray) { type = type.GetElementType(); }
 
-            if (ctx.HasTypes.ContainsKey(type) || type.IsPrimitive || type.IsPointer)
+            if (ctx.HasTypes.ContainsKey(type)      ||
+                type.IsPrimitive || type.IsPointer  ||
+                KeyWordMap.ContainsKey(type.Namespace + "." + type.Name))
             {
                 return;
             }
