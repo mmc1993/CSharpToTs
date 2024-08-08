@@ -6,21 +6,11 @@ using System.Reflection;
 
 namespace GenCode
 {
-    class AAA
-    {
-        public int Func(out int a, ref int b)
-        {
-            a = 0;
-            return 0;
-        }
-    }
-
     public static class GenTSCode
     {
         private class FuncInfo
         {
-            public bool IsStatic      = false;
-            public bool IsOperator    = false;
+            public bool IsStatic = false;
             public string Name = "";
             public List<string>           OutParams = new();
             public List<(string, string)> InParams = new();
@@ -67,7 +57,36 @@ namespace GenCode
             public NamespaceInfo GenTree = new();
         }
 
-        private static Dictionary<string, string> KeyWordMap = new()
+        private static Dictionary<string, string> OpRemap = new()
+        {
+            // +): __add
+            // -): __sub
+            // *): __mul
+            // /): __div
+            // %): __mod
+            // ^): __pow
+            // -): __unm
+            // ==): __eq
+            // <): __lt
+            // <=): __le
+            { ".ctor",              "constructor" },
+            { "op_Addition",        "__add" },
+            { "op_Subtraction",     "__sub" },
+            { "op_Multiply",        "__mul" },
+            { "op_Division",        "__div" },
+            { "op_Modulus",         "__mod" },
+            { "op_UnaryNegation",   "__unm" },
+            { "op_Equality",        "__eq" },
+            { "op_LessThan",        "__lt" },
+            { "op_LessThanOrEqual", "__le" },
+        };
+
+        private static string F(string src)
+        {
+            return OpRemap.TryGetValue(src, out var dst) ? dst : src;
+        }
+
+        private static Dictionary<string, string> KWRemap = new()
         {
             { "System.Void", "void" },
             { "System.Single", "number" },
@@ -86,7 +105,7 @@ namespace GenCode
         {
             {
                 var keyword = type.Namespace + "." + type.Name;
-                if (KeyWordMap.TryGetValue(keyword, out var v))
+                if (KWRemap.TryGetValue(keyword, out var v))
                 {
                     return v;
                 }
@@ -96,7 +115,7 @@ namespace GenCode
                 var isArray = type.IsArray;
                 if (isArray) { type = type.GetElementType(); }
                 var keyword = type.Namespace + "." + type.Name;
-                if (KeyWordMap.TryGetValue(keyword, out var v))
+                if (KWRemap.TryGetValue(keyword, out var v))
                 {
                     keyword = v;
                 }
@@ -119,7 +138,6 @@ namespace GenCode
         {
             List<System.Type> types = new()
             {
-                typeof(AAA),
                 typeof(Vector3),
             };
             Gen(types, "G:/TSDemo/types/t.d.ts");
@@ -274,9 +292,13 @@ namespace GenCode
             foreach (var methodBase in methodBases)
             {
                 var methodInfo = methodBase as MethodInfo;
-                var ctorInfo = methodBase as ConstructorInfo;
 
                 if (methodInfo != null && !CheckMethodValid(methodInfo))
+                {
+                    continue;
+                }
+
+                if (methodBase.IsSpecialName && methodBase.Name.StartsWith("op") && !F(methodBase.Name).StartsWith("_"))
                 {
                     continue;
                 }
@@ -284,9 +306,7 @@ namespace GenCode
                 var funcInfo = new FuncInfo()
                 {
                     IsStatic = methodBase.IsStatic,
-                    IsOperator = methodBase.IsSpecialName
-                              && methodBase.Name.StartsWith("op"),
-                    Name = ctorInfo != null ? "constructor" : methodInfo.Name,
+                    Name = F(methodBase.Name),
                 };
 
                 if (methodInfo != null)
@@ -356,7 +376,7 @@ namespace GenCode
 
             if (ctx.HasTypes.ContainsKey(type)      ||
                 type.IsPrimitive || type.IsPointer  ||
-                KeyWordMap.ContainsKey(type.Namespace + "." + type.Name))
+                KWRemap.ContainsKey(type.Namespace + "." + type.Name))
             {
                 return;
             }
