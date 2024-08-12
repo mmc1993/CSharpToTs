@@ -13,7 +13,16 @@ namespace GenCode
 
     public class Test
     {
-        public event System.Action<int> Complate;
+        //public event System.Action<int> Complate;
+        public void Func(System.Action<int> func)
+        {
+
+        }
+
+        public int Func2(System.Func<int, int> func)
+        {
+            return 0;
+        }
     }
 
     public static class GenTSCode
@@ -115,6 +124,23 @@ namespace GenCode
 
         private static string T(System.Type type)
         {
+            if (type.IsGenericType)
+            {
+                Debug.Assert(type.Name.StartsWith("Action")
+                          || type.Name.StartsWith("Func"));
+                var isFunc = type.Name.StartsWith("Func");
+                var argments = type.GetGenericArguments();
+                System.Text.StringBuilder sb = new();
+                sb.Append("(");
+                for (var i = isFunc ? 1 : 0; i != argments.Length; ++i)
+                {
+                    if (i > (isFunc ? 1 : 0)) { sb.Append(", "); }
+                    sb.AppendFormat("_{0}: {1}", i, T(argments[i]));
+                }
+                sb.AppendFormat(") => {0}", isFunc ? T(argments[0]) : "void");
+                return sb.ToString();
+            }
+
             {
                 var keyword = type.Namespace + "." + type.Name;
                 if (KWRemap.TryGetValue(keyword, out var v))
@@ -354,7 +380,10 @@ namespace GenCode
                     {
                         funcInfo.OutParams.Add(T(GetRawType(param.ParameterType)));
                     }
-                    PushType(ctx, GetRawType(param.ParameterType));
+                    if (!param.ParameterType.IsGenericType)
+                    {
+                        PushType(ctx, GetRawType(param.ParameterType));
+                    }
                 }
 
                 if (funcInfo.OutParams.Count > 1 && funcInfo.OutParams[0] == "void")
@@ -457,9 +486,14 @@ namespace GenCode
             foreach (var paramInfo in methodInfo.GetParameters())
             {
                 if (paramInfo.ParameterType.ContainsGenericParameters   ||
-                    paramInfo.ParameterType.IsGenericType               ||
                     paramInfo.ParameterType.IsPointer                   ||
                     paramInfo.ParameterType.IsInterface) { return false; }
+
+                if (paramInfo.ParameterType.IsGenericType && !paramInfo.ParameterType.Name.StartsWith("Action")
+                                                          && !paramInfo.ParameterType.Name.StartsWith("Func"))
+                {
+                    return false;
+                }
             }
             return true;
         }
