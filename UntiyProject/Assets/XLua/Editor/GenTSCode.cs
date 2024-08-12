@@ -24,6 +24,7 @@ namespace GenCode
         private class PropInfo
         {
             public bool IsStatic = false;
+            public bool IsReadOnly = false;
             public string Name = "";
             public string Type = "";
             public string Value = "";
@@ -318,7 +319,8 @@ namespace GenCode
                 }
                 else
                 {
-                    if (propInfo.IsStatic) { sb.Append("static "); }
+                    if (propInfo.IsStatic)   { sb.Append("static ");   }
+                    if (propInfo.IsReadOnly) { sb.Append("readonly "); }
                     sb.Append(propInfo.Name);
                     sb.Append(" : ");
                     sb.Append(propInfo.Type);
@@ -429,6 +431,7 @@ namespace GenCode
             {
                 var propInfo = new PropInfo()
                 {
+                    IsReadOnly = propertyInfo.CanRead,
                     IsStatic = (propertyInfo.SetMethod != null? propertyInfo.SetMethod.IsStatic: false)
                             || (propertyInfo.GetMethod != null? propertyInfo.GetMethod.IsStatic: false),
                     Name = propertyInfo.Name, Type = T(propertyInfo.PropertyType),
@@ -464,6 +467,7 @@ namespace GenCode
 
                 var propInfo = new PropInfo()
                 {
+                    IsReadOnly = fieldInfo.IsLiteral || fieldInfo.IsInitOnly,
                     IsStatic = fieldInfo.IsStatic,
                     Type = T(fieldInfo.FieldType),
                     Name = fieldInfo.Name, Value = "",
