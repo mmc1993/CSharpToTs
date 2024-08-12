@@ -491,7 +491,7 @@ namespace GenCode
             {
                 return;
             }
-            ctx.HasTypes.Add(type, false); ctx.GenTypes.Enqueue(type);
+            ctx.HasTypes.Add(type, type.IsEnum); ctx.GenTypes.Enqueue(type);
         }
 
         private static bool CheckMethodValid(MethodInfo methodInfo)
