@@ -9,6 +9,7 @@ namespace GenCode
     //  支持导出回调函数
     //  支持导出接口
     //  支持导出继承
+    //  支持导出泛型
 
     public class Test
     {
@@ -92,7 +93,7 @@ namespace GenCode
             { "op_LessThanOrEqual", "__le" },
         };
 
-        private static string F(string src)
+        private static string S(string src)
         {
             return OpRemap.TryGetValue(src, out var dst) ? dst : src;
         }
@@ -300,7 +301,7 @@ namespace GenCode
                 var nextNode = treeNode.FindSpace(name);
                 if (nextNode == null)
                 {
-                    nextNode = new() { Name = name };
+                    nextNode = new(){ Name=name };
                     treeNode.Spaces.Add(nextNode);
                 }
                 treeNode = nextNode;
@@ -327,37 +328,29 @@ namespace GenCode
         {
             foreach (var methodBase in methodBases)
             {
-                var methodInfo = methodBase as MethodInfo;
-
-                if (methodInfo != null && !CheckMethodValid(methodInfo))
-                {
-                    continue;
-                }
-
-                if (methodBase.IsSpecialName && methodBase.Name.StartsWith("op") && !F(methodBase.Name).StartsWith("_"))
+                if (methodBase is MethodInfo && !CheckMethodValid(methodBase as MethodInfo))
                 {
                     continue;
                 }
 
                 var funcInfo = new FuncInfo()
                 {
-                    IsStatic = methodBase.IsStatic,
-                    Name = F(methodBase.Name),
+                    IsStatic = methodBase.IsStatic, Name = S(methodBase.Name),
                 };
 
-                if (methodInfo != null)
+                if (methodBase is MethodInfo)
                 {
-                    funcInfo.OutParams.Add(T(methodInfo.ReturnType));
-                    PushType(ctx, GetRawType(methodInfo.ReturnType));
+                    funcInfo.OutParams.Add(T((methodBase as MethodInfo).ReturnType));
+                    PushType(ctx, GetRawType((methodBase as MethodInfo).ReturnType));
                 }
 
                 foreach (var param in methodBase.GetParameters())
                 {
-                    if (GetParamWrap(param) == "Ref" || GetParamWrap(param) == "")
+                    if (ParamWrap(param) == "Ref" || ParamWrap(param) == "Nil")
                     {
                         funcInfo.InParams.Add((T(GetRawType(param.ParameterType)), param.Name));
                     }
-                    if (GetParamWrap(param) == "Out" || GetParamWrap(param) == "Ref")
+                    if (ParamWrap(param) == "Out" || ParamWrap(param) == "Ref")
                     {
                         funcInfo.OutParams.Add(T(GetRawType(param.ParameterType)));
                     }
@@ -381,8 +374,7 @@ namespace GenCode
                 {
                     IsStatic = (propertyInfo.SetMethod != null? propertyInfo.SetMethod.IsStatic: false)
                             || (propertyInfo.GetMethod != null? propertyInfo.GetMethod.IsStatic: false),
-                    Name = propertyInfo.Name,
-                    Type = T(propertyInfo.PropertyType),
+                    Name = propertyInfo.Name, Type = T(propertyInfo.PropertyType),
                 };
                 classInfo.MemberProps.Add(propInfo);
                 PushType(ctx, propertyInfo.PropertyType);
@@ -436,9 +428,7 @@ namespace GenCode
             {
                 return;
             }
-
-            ctx.HasTypes.Add(type, false);
-            ctx.GenTypes.Enqueue(type);
+            ctx.HasTypes.Add(type, false); ctx.GenTypes.Enqueue(type);
         }
 
         private static bool CheckMethodValid(MethodInfo methodInfo)
@@ -474,19 +464,16 @@ namespace GenCode
             return true;
         }
 
-        private static bool HasRefType(System.Type type)
-        {
-            return type.Name.EndsWith("&");
-        }
-
         private static System.Type GetRawType(System.Type type)
         {
-            return HasRefType(type) ? type.GetElementType() : type;
+            return type.Name.EndsWith("&") ? type.GetElementType() : type;
         }
 
-        private static string GetParamWrap(ParameterInfo parameterInfo)
+        private static string ParamWrap(ParameterInfo parameterInfo)
         {
-            return HasRefType(parameterInfo.ParameterType) ? parameterInfo.Attributes == ParameterAttributes.Out ? "Out" : "Ref" : "";
+            return parameterInfo.ParameterType.Name.EndsWith("&")
+                 ? parameterInfo.Attributes == ParameterAttributes.Out
+                 ? "Out" : "Ref" : "Nil";
         }
     }
 }
