@@ -6,27 +6,9 @@ using System.Reflection;
 
 namespace GenCode
 {
-    //  支持导出继承
-    //  支持导出接口
-    //  支持导出泛型
-
-    interface IInterface
+    public class Test
     {
-        void Func();
-    }
-
-    public class Base
-    {
-        //public event System.Action<int> Complate;
-    }
-
-    public class Test : Base, IInterface
-    {
-        //public event System.Action<int> Complate;
-        public void Func()
-        {
-            throw new System.NotImplementedException();
-        }
+        public event System.Action Complate;
     }
 
     public static class GenTSCode
@@ -130,6 +112,14 @@ namespace GenCode
 
         private static string T(System.Type type)
         {
+            //  System.Action
+            if (type == typeof(System.Action))
+            {
+                return "() => void";
+            }
+
+            //  System.Action<T>
+            //  System.Func<T>
             if (type.IsGenericType)
             {
                 Debug.Assert(type.Name.StartsWith("Action")
@@ -147,6 +137,7 @@ namespace GenCode
                 return sb.ToString();
             }
 
+            //  KWRemap
             {
                 var keyword = type.Namespace + "." + type.Name;
                 if (KWRemap.TryGetValue(keyword, out var v))
@@ -155,6 +146,7 @@ namespace GenCode
                 }
             }
 
+            //  Other
             {
                 var isArray = type.IsArray;
                 if (isArray) { type = type.GetElementType(); }
@@ -454,6 +446,8 @@ namespace GenCode
                 var funcInfoDel = new FuncInfo() { IsStatic = false, Name = eventInfo.Name };
                 funcInfoAdd.InParams.Add(("\"+\"", "event"));
                 funcInfoDel.InParams.Add(("\"-\"", "event"));
+                funcInfoAdd.InParams.Add((T(GetRawType(eventInfo.EventHandlerType)), "call"));
+                funcInfoDel.InParams.Add((T(GetRawType(eventInfo.EventHandlerType)), "call"));
                 funcInfoAdd.OutParams.Add("void");
                 funcInfoDel.OutParams.Add("void");
                 classInfo.MemberFuncs.Add(funcInfoAdd);
