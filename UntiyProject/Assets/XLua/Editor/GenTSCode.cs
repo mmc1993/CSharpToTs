@@ -6,6 +6,15 @@ using System.Reflection;
 
 namespace GenCode
 {
+    //  支持导出回调函数
+    //  支持导出接口
+    //  支持导出继承
+
+    public class Test
+    {
+        public event System.Action<int> Complate;
+    }
+
     public static class GenTSCode
     {
         private class FuncInfo
@@ -21,11 +30,13 @@ namespace GenCode
             public bool IsStatic = false;
             public string Name = "";
             public string Type = "";
+            public string Value = "";
         }
 
         private class ClassInfo
         {
             public string Name = "";
+            public bool IsEnum = false;
             public List<FuncInfo> MemberFuncs = new();
             public List<PropInfo> MemberProps = new();
         }
@@ -138,6 +149,7 @@ namespace GenCode
         {
             List<System.Type> types = new()
             {
+                typeof(Test),
                 typeof(Vector3),
             };
             Gen(types, "G:/TSDemo/types/t.d.ts");
@@ -181,9 +193,13 @@ namespace GenCode
                 var classInfo = HandleClass(ctx, spaceInfo, type);
                 if (classInfo != null && ctx.HasTypes[type])
                 {
-                    HandlePropertys(ctx, classInfo, type.GetProperties());
-                    HandleMethods(ctx, classInfo, type.GetConstructors());
-                    HandleMethods(ctx, classInfo, type.GetMethods());
+                    if (!classInfo.IsEnum)
+                    {
+                        HandlePropertys(ctx, classInfo, type.GetProperties());
+                        HandleMethods(ctx, classInfo, type.GetConstructors());
+                        HandleMethods(ctx, classInfo, type.GetMethods());
+                    }
+                    HandleEvents(ctx, classInfo, type.GetEvents());
                     HandleFields(ctx, classInfo, type.GetFields());
                 }
             }
@@ -218,7 +234,14 @@ namespace GenCode
         private static void GenCode(ClassInfo classInfo, int ident, System.Text.StringBuilder outputBuffer)
         {
             System.Text.StringBuilder sb = new();
-            sb.AppendFormat("{0}class {1}\n{0}{{\n", Ident(ident), classInfo.Name);
+            if (classInfo.IsEnum)
+            {
+                sb.AppendFormat("{0}const enum {1}\n{0}{{\n", Ident(ident), classInfo.Name);
+            }
+            else
+            {
+                sb.AppendFormat("{0}class {1}\n{0}{{\n", Ident(ident), classInfo.Name);
+            }
 
             //  func
             foreach (var funcInfo in classInfo.MemberFuncs)
@@ -248,11 +271,21 @@ namespace GenCode
             foreach (var propInfo in classInfo.MemberProps)
             {
                 sb.Append(Ident(ident + 1));
-                if (propInfo.IsStatic) { sb.Append("static "); }
-                sb.Append(propInfo.Name);
-                sb.Append(" : ");
-                sb.Append(propInfo.Type);
-                sb.Append(";\n");
+                if (classInfo.IsEnum)
+                {
+                    sb.Append(propInfo.Name);
+                    sb.Append(" = ");
+                    sb.Append(propInfo.Value);
+                    sb.Append(",\n");
+                }
+                else
+                {
+                    if (propInfo.IsStatic) { sb.Append("static "); }
+                    sb.Append(propInfo.Name);
+                    sb.Append(" : ");
+                    sb.Append(propInfo.Type);
+                    sb.Append(";\n");
+                }
             }
             sb.Append(Ident(ident));
             sb.Append("}\n");
@@ -281,7 +314,10 @@ namespace GenCode
             var classInfo = space.FindClass(type.Name);
             if (classInfo == null)
             {
-                classInfo = new() { Name = type.Name };
+                classInfo = new()
+                {
+                    Name = type.Name, IsEnum = type.IsEnum
+                };
                 space.Classs.Add(classInfo);
             }
             return classInfo;
@@ -353,18 +389,38 @@ namespace GenCode
             }
         }
 
+        private static void HandleEvents(Contex ctx, ClassInfo classInfo, EventInfo[] eventInfos)
+        {
+            foreach (var eventInfo in eventInfos)
+            {
+                var funcInfoAdd = new FuncInfo() { IsStatic = false, Name = eventInfo.Name };
+                var funcInfoDel = new FuncInfo() { IsStatic = false, Name = eventInfo.Name };
+                funcInfoAdd.InParams.Add(("\"+\"", "event"));
+                funcInfoDel.InParams.Add(("\"-\"", "event"));
+                funcInfoAdd.OutParams.Add("void");
+                funcInfoDel.OutParams.Add("void");
+                classInfo.MemberFuncs.Add(funcInfoAdd);
+                classInfo.MemberFuncs.Add(funcInfoDel);
+                PushType(ctx, eventInfo.EventHandlerType);
+            }
+        }
+
         private static void HandleFields(Contex ctx, ClassInfo classInfo, FieldInfo[] fieldInfos)
         {
             foreach (var fieldInfo in fieldInfos)
             {
-                if (!fieldInfo.IsPublic) { continue; }
+                if (!fieldInfo.IsPublic || (classInfo.IsEnum && fieldInfo.IsSpecialName)) { continue; }
 
                 var propInfo = new PropInfo()
                 {
                     IsStatic = fieldInfo.IsStatic,
                     Type = T(fieldInfo.FieldType),
-                    Name = fieldInfo.Name,
+                    Name = fieldInfo.Name, Value = "",
                 };
+                if (classInfo.IsEnum)
+                {
+                    propInfo.Value = fieldInfo.GetRawConstantValue().ToString();
+                }
                 classInfo.MemberProps.Add(propInfo);
                 PushType(ctx, fieldInfo.FieldType);
             }
