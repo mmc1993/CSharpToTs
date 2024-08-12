@@ -6,22 +6,26 @@ using System.Reflection;
 
 namespace GenCode
 {
-    //  支持导出回调函数
-    //  支持导出接口
     //  支持导出继承
+    //  支持导出接口
     //  支持导出泛型
 
-    public class Test
+    interface IInterface
+    {
+        void Func();
+    }
+
+    public class Base
     {
         //public event System.Action<int> Complate;
-        public void Func(System.Action<int> func)
-        {
+    }
 
-        }
-
-        public int Func2(System.Func<int, int> func)
+    public class Test : Base, IInterface
+    {
+        //public event System.Action<int> Complate;
+        public void Func()
         {
-            return 0;
+            throw new System.NotImplementedException();
         }
     }
 
@@ -47,6 +51,8 @@ namespace GenCode
         {
             public string Name = "";
             public bool IsEnum = false;
+            public string ParentClass = "";
+            public List<string> Interfaces = new();
             public List<FuncInfo> MemberFuncs = new();
             public List<PropInfo> MemberProps = new();
         }
@@ -267,7 +273,20 @@ namespace GenCode
             }
             else
             {
-                sb.AppendFormat("{0}class {1}\n{0}{{\n", Ident(ident), classInfo.Name);
+                sb.AppendFormat("{0}class {1}", Ident(ident), classInfo.Name);
+                if (classInfo.ParentClass != "")
+                {
+                    sb.Append(" extends ");
+                    sb.Append(classInfo.ParentClass);
+                }
+                if (classInfo.Interfaces.Count != 0)
+                {
+                    sb.Append(" implements ");
+                    sb.AppendJoin(", ", classInfo.Interfaces);
+                }
+                sb.Append("\n");
+                sb.Append(Ident(ident));
+                sb.Append("{\n");
             }
 
             //  func
@@ -345,6 +364,23 @@ namespace GenCode
                 {
                     Name = type.Name, IsEnum = type.IsEnum
                 };
+
+                if (ctx.HasTypes[type])
+                {
+                    if (type.BaseType != null && type.BaseType != typeof(object))
+                    {
+                        classInfo.ParentClass = T(type.BaseType);
+                        PushType(ctx, type.BaseType);
+                    }
+
+                    foreach (var typeitem in type.GetInterfaces())
+                    {
+                        if (typeitem.IsGenericType){continue;}
+                        classInfo.Interfaces.Add(T(typeitem));
+                        PushType(ctx, typeitem);
+                    }
+                }
+
                 space.Classs.Add(classInfo);
             }
             return classInfo;
