@@ -298,7 +298,11 @@ namespace GenCode
                 }
                 sb.Append(")");
 
-                if (funcInfo.OutParams.Count > 0)
+                if      (funcInfo.OutParams.Count == 1)
+                {
+                    sb.AppendFormat(": {0}", funcInfo.OutParams[0]);
+                }
+                else if (funcInfo.OutParams.Count >  1)
                 {
                     sb.AppendFormat(": [{0}]", string.Join(", ", funcInfo.OutParams));
                 }
@@ -359,20 +363,17 @@ namespace GenCode
                     Name = type.Name, IsEnum = type.IsEnum
                 };
 
-                if (ctx.HasTypes[type])
+                if (type.BaseType != null)
                 {
-                    if (type.BaseType != null && type.BaseType != typeof(object))
-                    {
-                        classInfo.ParentClass = T(type.BaseType);
-                        PushType(ctx, type.BaseType);
-                    }
+                    classInfo.ParentClass = T(type.BaseType);
+                    PushType(ctx, type.BaseType);
+                }
 
-                    foreach (var typeitem in type.GetInterfaces())
-                    {
-                        if (typeitem.IsGenericType){continue;}
-                        classInfo.Interfaces.Add(T(typeitem));
-                        PushType(ctx, typeitem);
-                    }
+                foreach (var typeitem in type.GetInterfaces())
+                {
+                    if (typeitem.IsGenericType){continue;}
+                    classInfo.Interfaces.Add(T(typeitem));
+                    PushType(ctx, typeitem);
                 }
 
                 space.Classs.Add(classInfo);
